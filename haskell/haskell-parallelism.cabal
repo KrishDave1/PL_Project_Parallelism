@@ -8,14 +8,10 @@ description:
     and explicit parallelism constructs — can be leveraged to build parallel
     algorithms that are safe, composable, and performant.
     .
-    Six computational problems are implemented:
+    Two computational problems are implemented:
     .
     1. Parallel Merge Sort (Eval monad + Strategies)
     2. Parallel Matrix Multiplication (Data Parallelism)
-    3. Parallel MapReduce Word Count (Par monad)
-    4. Monte Carlo Pi Estimation (Async + STM)
-    5. K-Means Clustering (Strategies + parListChunk) — Machine Learning
-    6. Numerical Integration (Domain Decomposition) — Numerical Simulation
     .
     Each problem is benchmarked against equivalent C++ and Python implementations.
 
@@ -54,34 +50,15 @@ library
         -- Problem 2: Parallel Matrix Multiplication
         Matrix.SequentialMatMul
         Matrix.ParallelMatMul
-        -- Problem 3: Parallel MapReduce Word Count
-        MapReduce.SequentialWordCount
-        MapReduce.ParallelWordCount
-        -- Problem 4: Monte Carlo Pi Estimation
-        MonteCarlo.SequentialPi
-        MonteCarlo.ParallelPi
-        -- Problem 5: K-Means Clustering (Machine Learning)
-        KMeans.SequentialKMeans
-        KMeans.ParallelKMeans
-        -- Problem 6: Numerical Integration (Numerical Simulation)
-        NumericalIntegration.SequentialIntegration
-        NumericalIntegration.ParallelIntegration
+
         -- Benchmarking utilities
         Bench.Utils
     build-depends:
         parallel >= 3.2,
         deepseq >= 1.4,
         random >= 1.2,
-        vector >= 0.13,
-        async >= 2.2,
-        stm >= 2.5,
-        monad-par >= 0.3,
         time >= 1.9,
-        directory >= 1.3,
-        bytestring >= 0.11,
-        containers >= 0.6,
-        text >= 2.0,
-        splitmix >= 0.1
+        directory >= 1.3
 
 -- ============================================================================
 -- Executable: Main benchmark runner
@@ -115,33 +92,4 @@ executable bench-matmul
         haskell-parallelism,
         deepseq >= 1.4
 
-executable bench-wordcount
-    import:           exe-settings
-    main-is:          BenchWordCount.hs
-    hs-source-dirs:   app
-    build-depends:
-        haskell-parallelism,
-        deepseq >= 1.4
 
-executable bench-montecarlo
-    import:           exe-settings
-    main-is:          BenchMonteCarlo.hs
-    hs-source-dirs:   app
-    build-depends:
-        haskell-parallelism
-
-executable bench-kmeans
-    import:           exe-settings
-    main-is:          BenchKMeans.hs
-    hs-source-dirs:   app
-    build-depends:
-        haskell-parallelism,
-        deepseq >= 1.4,
-        random >= 1.2
-
-executable bench-integration
-    import:           exe-settings
-    main-is:          BenchIntegration.hs
-    hs-source-dirs:   app
-    build-depends:
-        haskell-parallelism
