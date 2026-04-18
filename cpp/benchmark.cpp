@@ -3,6 +3,7 @@
 #include <vector>
 #include <random>
 #include <iomanip>
+#include <future>
 
 using namespace std;
 using namespace chrono;
@@ -31,6 +32,31 @@ void sequentialMergeSort(vector<int>& arr, int left, int right, vector<int>& tem
     int mid = left + (right - left) / 2;
     sequentialMergeSort(arr, left, mid, temp);
     sequentialMergeSort(arr, mid + 1, right, temp);
+    merge(arr, left, mid, right, temp);
+}
+
+void parallelMergeSort(vector<int>& arr, int left, int right, vector<int>& temp, int depth) {
+    if (left >= right) return;
+    if (depth <= 0) {
+        sequentialMergeSort(arr, left, right, temp);
+        return;
+    }
+    int mid = left + (right - left) / 2;
+    
+    // Spawn left half on a new thread
+    // NOTE: This shares 'arr' and 'temp' with the parent thread!
+    // Safe ONLY because we write to non-overlapping index ranges.
+    auto leftFuture = async(launch::async, [&]() {
+        parallelMergeSort(arr, left, mid, temp, depth - 1);
+    });
+    
+    // Right half on current thread
+    parallelMergeSort(arr, mid + 1, right, temp, depth - 1);
+    
+    // Wait for left half to complete
+    leftFuture.get();
+    
+    // Merge (sequential — both halves are now sorted)
     merge(arr, left, mid, right, temp);
 }
 
@@ -71,6 +97,21 @@ int main() {
                 sequentialMergeSort(arr, 0, size - 1, temp);
             });
             printResult("Sequential Merge Sort", t);
+            // Parallel
+            for (int depth : {2, 3, 4}) {
+                auto arr2 = original;
+                vector<int> temp2(size);
+                double pt = timeIt([&]() {
+                    parallelMergeSort(arr2, 0, size - 1, temp2, depth);
+                });
+                string label = "Parallel (depth=" + to_string(depth) + ")";
+                printResult(label, pt);
+                cout << "    Speedup: " << fixed << setprecision(2) << t / pt << "x" << endl;
+                
+                // Verify correctness
+                bool correct = (arr == arr2);
+                cout << "    Correctness: " << (correct ? "PASS" : "FAIL") << endl;
+            }
         }
         cout << endl;
     }
