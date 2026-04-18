@@ -115,9 +115,31 @@ def parallel_merge_sort(arr, num_workers=4):
     
     return sorted_chunks[0]
 
+def sequential_mat_mul(a, b):
+    """
+    Sequential matrix multiplication using nested loops.
+    
+    COMPARISON WITH HASKELL:
+      Haskell: [[ sum $ zipWith (*) row col | col <- transpose b ] | row <- a]
+      Python:  Three nested for-loops (C-style iteration)
+      
+    The Haskell version is more declarative and closer to mathematical notation.
+    """
+    n = len(a)
+    c = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for k in range(n):
+            for j in range(n):
+                c[i][j] += a[i][k] * b[k][j]
+    return c
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
+
+def generate_random_matrix(n, seed=42):
+    rng = random.Random(seed)
+    return [[rng.uniform(0, 100) for _ in range(n)] for _ in range(n)]
 
 def main():
     print()
@@ -144,6 +166,16 @@ def main():
             correct = seq_result == par_result
             print(f"    Correctness: {'PASS' if correct else 'FAIL'}")
         print()
+
+    print_header("BENCHMARK 2: Matrix Multiplication (multiprocessing.Pool)")
+    
+    for size in [64, 128]:
+        print(f"  --- Matrix size: {size}x{size} ---")
+        a = generate_random_matrix(size, 42)
+        b = generate_random_matrix(size, 99)
+        
+        _, seq_time = time_it(sequential_mat_mul, a, b)
+        print_result("Sequential", seq_time)
 
 if __name__ == "__main__":
     main()
