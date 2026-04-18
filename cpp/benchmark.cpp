@@ -71,6 +71,31 @@ vector<vector<double>> sequentialMatMul(const vector<vector<double>>& a,
     return c;
 }
 
+vector<vector<double>> parallelMatMul(const vector<vector<double>>& a,
+                                       const vector<vector<double>>& b,
+                                       int numThreads) {
+    int n = a.size();
+    vector<vector<double>> c(n, vector<double>(n, 0.0));
+    
+    vector<thread> threads;
+    int chunkSize = (n + numThreads - 1) / numThreads;
+    
+    for (int t = 0; t < numThreads; t++) {
+        int startRow = t * chunkSize;
+        int endRow = min(startRow + chunkSize, n);
+        
+        threads.emplace_back([&, startRow, endRow]() {
+            for (int i = startRow; i < endRow; i++)
+                for (int k = 0; k < n; k++)
+                    for (int j = 0; j < n; j++)
+                        c[i][j] += a[i][k] * b[k][j];
+        });
+    }
+    
+    for (auto& t : threads) t.join();
+    return c;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -151,6 +176,15 @@ int main() {
             seqTime = timeIt([&]() { sequentialMatMul(a, b); });
             printResult("Sequential", seqTime);
         }
+
+        for (int threads : {2, 4, 8}) {
+            double pt = timeIt([&]() { parallelMatMul(a, b, threads); });
+            string label = "Parallel (" + to_string(threads) + " threads)";
+            printResult(label, pt);
+            cout << "    Speedup: " << fixed << setprecision(2) << seqTime / pt << "x" << endl;
+        }
         cout << endl;
     }
+    cout << "\nAll C++ benchmarks complete!" << endl;
+    return 0;
 }
