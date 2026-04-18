@@ -133,6 +133,38 @@ def sequential_mat_mul(a, b):
                 c[i][j] += a[i][k] * b[k][j]
     return c
 
+def _compute_rows(args):
+    """Worker: compute a chunk of result rows."""
+    a_chunk, b, n = args
+    result = []
+    for row in a_chunk:
+        new_row = [0.0] * n
+        for k in range(n):
+            for j in range(n):
+                new_row[j] += row[k] * b[k][j]
+        result.append(new_row)
+    return result
+
+
+def parallel_mat_mul(a, b, num_workers=4):
+    """
+    Parallel matrix multiplication using multiprocessing.
+    
+    Each worker computes a chunk of rows.
+    
+    COMPARISON WITH HASKELL:
+      Haskell: parMap rdeepseq computeRow a  ← one line!
+      Python:  Split data, pickle, send to processes, unpickle, collect, merge
+    """
+    n = len(a)
+    chunk_size = max(1, n // num_workers)
+    chunks = [(a[i:i+chunk_size], b, n) for i in range(0, n, chunk_size)]
+    
+    with Pool(num_workers) as pool:
+        results = pool.map(_compute_rows, chunks)
+    
+    return [row for chunk in results for row in chunk]
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
@@ -176,6 +208,15 @@ def main():
         
         _, seq_time = time_it(sequential_mat_mul, a, b)
         print_result("Sequential", seq_time)
+
+        for workers in [2, 4]:
+            _, par_time = time_it(parallel_mat_mul, a, b, workers)
+            speedup = seq_time / par_time if par_time > 0 else 0
+            print_result(f"Parallel ({workers} workers)", par_time)
+            print(f"    Speedup: {speedup:.2f}x")
+        print()
+        
+    print("\nAll Python benchmarks complete!")
 
 if __name__ == "__main__":
     main()
