@@ -60,12 +60,33 @@ void parallelMergeSort(vector<int>& arr, int left, int right, vector<int>& temp,
     merge(arr, left, mid, right, temp);
 }
 
+vector<vector<double>> sequentialMatMul(const vector<vector<double>>& a,
+                                        const vector<vector<double>>& b) {
+    int n = a.size();
+    vector<vector<double>> c(n, vector<double>(n, 0.0));
+    for (int i = 0; i < n; i++)
+        for (int k = 0; k < n; k++)
+            for (int j = 0; j < n; j++)
+                c[i][j] += a[i][k] * b[k][j];
+    return c;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
     vector<int> v(n);
     for (int i = 0; i < n; i++) v[i] = dist(gen);
     return v;
+}
+
+vector<vector<double>> generateRandomMatrix(int n, int seed) {
+    mt19937 gen(seed);
+    uniform_real_distribution<double> dist(0.0, 100.0);
+    vector<vector<double>> m(n, vector<double>(n));
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            m[i][j] = dist(gen);
+    return m;
 }
 
 void printResult(const string& label, double timeMs) {
@@ -112,6 +133,23 @@ int main() {
                 bool correct = (arr == arr2);
                 cout << "    Correctness: " << (correct ? "PASS" : "FAIL") << endl;
             }
+        }
+        cout << endl;
+    }
+    // ===== PROBLEM 2: Matrix Multiplication =====
+    cout << "======================================================================" << endl;
+    cout << "  BENCHMARK 2: Matrix Multiplication (std::thread)" << endl;
+    cout << "======================================================================\n" << endl;
+    
+    for (int size : {64, 128, 256}) {
+        cout << "  --- Matrix size: " << size << "x" << size << " ---" << endl;
+        auto a = generateRandomMatrix(size, 42);
+        auto b = generateRandomMatrix(size, 99);
+        
+        double seqTime;
+        {
+            seqTime = timeIt([&]() { sequentialMatMul(a, b); });
+            printResult("Sequential", seqTime);
         }
         cout << endl;
     }
