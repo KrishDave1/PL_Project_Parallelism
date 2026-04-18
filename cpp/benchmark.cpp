@@ -123,9 +123,7 @@ void printResult(const string& label, double timeMs) {
 
 int main() {
     cout << endl;
-    cout << "╔══════════════════════════════════════════════════════════════════╗" << endl;
-    cout << "║   C++ Imperative Comparison Benchmarks                         ║" << endl;
-    cout << "╚══════════════════════════════════════════════════════════════════╝" << endl;
+    cout << "C++ Imperative Comparison Benchmarks" << endl;
     
     // ===== PROBLEM 1: Merge Sort =====
     cout << "\n======================================================================" << endl;
