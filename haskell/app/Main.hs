@@ -29,6 +29,8 @@ import Sorting.SequentialMergeSort (mergeSort)
 import Sorting.ParallelMergeSort (parallelMergeSortWithDepth)
 import Matrix.SequentialMatMul (matMul)
 import Matrix.ParallelMatMul (parallelMatMul, parallelMatMulChunked)
+import MapReduce.SequentialWordCount (wordCount, topN)
+import MapReduce.ParallelWordCount (parallelWordCount)
 
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
@@ -43,6 +45,7 @@ main = do
     
     benchMergeSort
     benchMatMul
+    benchWordCount
 
     
     putStrLn ""
@@ -140,9 +143,58 @@ benchMatMul = do
         putStrLn $ "    Speedup: " ++ show (roundTo 2 speedupC8) ++ "x"
         
         putStrLn ""
+        putStrLn ""
         ) sizes
 
+-- ============================================================================
+-- Benchmark 3: Parallel Word Count (MapReduce)
+-- ============================================================================
 
+benchWordCount :: IO ()
+benchWordCount = do
+    printHeader "BENCHMARK 3: Parallel MapReduce Word Count"
+    putStrLn "  FP Concepts: Par Monad, Higher-Order Functions, Map-Reduce Pattern"
+    putStrLn "  Parallelism: Data Parallelism (partition data, parallel map, reduce)"
+    putStrLn ""
+    
+    -- Generate a large text corpus by repeating sample text
+    let sampleText = unwords $ concatMap (\i -> 
+            [ "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"
+            , "functional", "programming", "enables", "safe", "parallelism"
+            , "through", "purity", "and", "immutability"
+            , "haskell", "provides", "multiple", "parallelism", "constructs"
+            , "including", "sparks", "strategies", "and", "the", "par", "monad"
+            , "word" ++ show i  -- unique words to make frequency distribution interesting
+            ]) [1..5000 :: Int]
+    
+    let textSizes = [(1 :: Int, sampleText), (3, concat $ replicate 3 sampleText)]
+    
+    mapM_ (\(_mult, text) -> do
+        let wordCount' = length (words text)
+        putStrLn $ "  --- Text size: ~" ++ show wordCount' ++ " words ---"
+        
+        _ <- evaluate (force text)
+        
+        -- Sequential
+        (seqResult, seqTime) <- timeIt (return $ wordCount text)
+        printResult "Sequential Word Count" seqTime
+        putStrLn $ "    Unique words: " ++ show (length $ topN 999999 seqResult)
+        putStrLn $ "    Top 5: " ++ show (topN 5 seqResult)
+        
+        -- Parallel with different chunk counts
+        mapM_ (\chunks -> do
+            (parResult, parTime) <- timeIt (return $ parallelWordCount chunks text)
+            let speedup = realToFrac seqTime / realToFrac parTime :: Double
+            printResult ("Parallel (" ++ show chunks ++ " chunks)") parTime
+            putStrLn $ "    Speedup: " ++ show (roundTo 2 speedup) ++ "x"
+            
+            -- Verify correctness
+            let correct = seqResult == parResult
+            putStrLn $ "    Correctness: " ++ (if correct then "PASS" else "FAIL")
+            ) [2, 4, 8]
+        
+        putStrLn ""
+        ) textSizes
 
 roundTo :: Int -> Double -> Double
 roundTo n x = fromIntegral (round (x * 10^n) :: Int) / fromIntegral (10^n :: Int)
