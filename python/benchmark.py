@@ -242,6 +242,43 @@ def sequential_monte_carlo_pi(n, seed=42):
             hits += 1
     return 4.0 * hits / n
 
+def _monte_carlo_worker(args):
+    """Worker: count hits in a chunk of samples."""
+    n, seed = args
+    rng = random.Random(seed)
+    hits = 0
+    for _ in range(n):
+        x = rng.random()
+        y = rng.random()
+        if x * x + y * y <= 1.0:
+            hits += 1
+    return hits
+
+
+def parallel_monte_carlo_pi(n, num_workers=4, seed=42):
+    """
+    Parallel Monte Carlo Pi estimation using multiprocessing.
+    
+    COMPARISON WITH HASKELL:
+      Haskell:
+        - Split PRNG purely: let (gen1, gen2) = splitSMGen gen
+        - Use mapConcurrently (futures) or STM (transactional memory)
+        - Deterministic: same seed → same split → same result
+      
+      Python:
+        - Must create separate Random instances per process
+        - No pure 'split' operation → use different seeds
+        - IPC overhead for result collection
+    """
+    samples_per_worker = n // num_workers
+    tasks = [(samples_per_worker, seed + i * 1000) for i in range(num_workers)]
+    
+    with Pool(num_workers) as pool:
+        results = pool.map(_monte_carlo_worker, tasks)
+    
+    total_hits = sum(results)
+    return 4.0 * total_hits / (num_workers * samples_per_worker)
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
@@ -327,6 +364,14 @@ def main():
         seq_result, seq_time = time_it(sequential_monte_carlo_pi, n)
         print_result("Sequential", seq_time)
         print(f"    π ≈ {seq_result:.7f}")
+
+        for workers in [2, 4, 8]:
+            par_result, par_time = time_it(parallel_monte_carlo_pi, n, workers)
+            speedup = seq_time / par_time if par_time > 0 else 0
+            print_result(f"Parallel ({workers} workers)", par_time)
+            print(f"    π ≈ {par_result:.7f}")
+            print(f"    Speedup: {speedup:.2f}x")
+        print()
         
         
     print("\nAll Python benchmarks complete!")
