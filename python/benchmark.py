@@ -1,6 +1,7 @@
 import time
 import random
 from multiprocessing import Pool
+from collections import Counter
 
 def time_it(func, *args):
     """
@@ -165,6 +166,29 @@ def parallel_mat_mul(a, b, num_workers=4):
     
     return [row for chunk in results for row in chunk]
 
+def sequential_word_count(text):
+    """
+    Sequential word count using Counter.
+    
+    Python's Counter makes this very clean — arguably as clean as Haskell:
+      Haskell: foldl' (\acc w -> Map.insertWith (+) w 1 acc) Map.empty words
+      Python:  Counter(words)
+    
+    But Python's Counter uses mutable hash tables internally.
+    """
+    words = text.lower().split()
+    words = [''.join(c for c in w if c.isalpha()) for w in words]
+    words = [w for w in words if w]
+    return Counter(words)
+
+
+def _count_chunk(text):
+    """Worker: count words in a text chunk."""
+    words = text.lower().split()
+    words = [''.join(c for c in w if c.isalpha()) for w in words]
+    words = [w for w in words if w]
+    return Counter(words)
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
@@ -172,6 +196,15 @@ def generate_random_list(n, seed=42):
 def generate_random_matrix(n, seed=42):
     rng = random.Random(seed)
     return [[rng.uniform(0, 100) for _ in range(n)] for _ in range(n)]
+
+def generate_text(num_words, seed=42):
+    word_list = [
+        "the", "quick", "brown", "fox", "jumps", "over",
+        "functional", "programming", "parallelism",
+        "haskell", "purity", "immutability"
+    ]
+    rng = random.Random(seed)
+    return " ".join(rng.choice(word_list) for _ in range(num_words))
 
 def main():
     print()
@@ -215,6 +248,17 @@ def main():
             print_result(f"Parallel ({workers} workers)", par_time)
             print(f"    Speedup: {speedup:.2f}x")
         print()
+
+    print_header("BENCHMARK 3: Word Count (multiprocessing.Pool)")
+    
+    for num_words in [50000, 150000]:
+        print(f"  --- Text size: ~{num_words} words ---")
+        text = generate_text(num_words)
+        
+        seq_result, seq_time = time_it(sequential_word_count, text)
+        print_result("Sequential", seq_time)
+        print(f"    Top 5: {seq_result.most_common(5)}")
+        
         
     print("\nAll Python benchmarks complete!")
 

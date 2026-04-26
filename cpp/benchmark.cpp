@@ -4,6 +4,7 @@
 #include <random>
 #include <iomanip>
 #include <future>
+#include <map>
 
 using namespace std;
 using namespace chrono;
@@ -96,6 +97,60 @@ vector<vector<double>> parallelMatMul(const vector<vector<double>>& a,
     return c;
 }
 
+map<string, int> sequentialWordCount(const string& text) {
+    map<string, int> freq;
+    string word;
+    for (char c : text) {
+        if (isalpha(c)) {
+            word += tolower(c);
+        } else if (!word.empty()) {
+            freq[word]++;
+            word.clear();
+        }
+    }
+    if (!word.empty()) freq[word]++;
+    return freq;
+}
+
+map<string, int> parallelWordCount(const string& text, int numThreads) {
+    int chunkSize = text.size() / numThreads;
+    vector<future<map<string, int>>> futures;
+    
+    for (int t = 0; t < numThreads; t++) {
+        int start = t * chunkSize;
+        int end = (t == numThreads - 1) ? text.size() : (t + 1) * chunkSize;
+        
+        // Adjust boundaries to not split words
+        while (end < (int)text.size() && isalpha(text[end])) end++;
+        
+        futures.push_back(async(launch::async, [&text, start, end]() {
+            map<string, int> local;
+            string word;
+            for (int i = start; i < end; i++) {
+                char c = text[i];
+                if (isalpha(c)) {
+                    word += tolower(c);
+                } else if (!word.empty()) {
+                    local[word]++;
+                    word.clear();
+                }
+            }
+            if (!word.empty()) local[word]++;
+            return local;
+        }));
+    }
+    
+    // Reduce: merge all local maps
+    map<string, int> result;
+    for (auto& f : futures) {
+        auto local = f.get();
+        for (auto& [word, count] : local) {
+            result[word] += count;
+        }
+    }
+    return result;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -112,6 +167,22 @@ vector<vector<double>> generateRandomMatrix(int n, int seed) {
         for (int j = 0; j < n; j++)
             m[i][j] = dist(gen);
     return m;
+}
+
+string generateText(int numWords) {
+    vector<string> words = {
+        "the", "quick", "brown", "fox", "jumps", "over",
+        "functional", "programming", "parallelism",
+        "haskell", "purity", "immutability"
+    };
+    mt19937 gen(42);
+    uniform_int_distribution<int> dist(0, words.size() - 1);
+    string text;
+    for (int i = 0; i < numWords; i++) {
+        if (i > 0) text += " ";
+        text += words[dist(gen)];
+    }
+    return text;
 }
 
 void printResult(const string& label, double timeMs) {
@@ -183,6 +254,30 @@ int main() {
         }
         cout << endl;
     }
+
+    // ===== PROBLEM 3: Word Count =====
+    cout << "======================================================================" << endl;
+    cout << "  BENCHMARK 3: Word Count (std::async)" << endl;
+    cout << "======================================================================\n" << endl;
+    
+    for (int numWords : {155000, 465000}) {
+        cout << "  --- Text size: ~" << numWords << " words ---" << endl;
+        string text = generateText(numWords);
+        
+        double seqTime = timeIt([&]() { sequentialWordCount(text); });
+        printResult("Sequential", seqTime);
+
+        for (int threads : {2, 4, 8}) {
+            double pt = timeIt([&]() { parallelWordCount(text, threads); });
+            string label = "Parallel (" + to_string(threads) + " threads)";
+            printResult(label, pt);
+            cout << "    Speedup: " << fixed << setprecision(2) << seqTime / pt << "x" << endl;
+        }
+        cout << endl;
+    }
+
+
+
     cout << "\nAll C++ benchmarks complete!" << endl;
     return 0;
 }
