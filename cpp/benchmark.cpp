@@ -151,6 +151,18 @@ map<string, int> parallelWordCount(const string& text, int numThreads) {
     return result;
 }
 
+double sequentialMonteCarloPi(int n, unsigned int seed) {
+    mt19937 gen(seed);
+    uniform_real_distribution<double> dist(0.0, 1.0);
+    int hits = 0;
+    for (int i = 0; i < n; i++) {
+        double x = dist(gen);
+        double y = dist(gen);
+        if (x * x + y * y <= 1.0) hits++;
+    }
+    return 4.0 * hits / n;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -276,7 +288,19 @@ int main() {
         cout << endl;
     }
 
-
+    // ===== PROBLEM 4: Monte Carlo Pi =====
+    cout << "======================================================================" << endl;
+    cout << "  BENCHMARK 4: Monte Carlo Pi (std::async + atomic)" << endl;
+    cout << "======================================================================\n" << endl;
+    
+    for (int n : {100000, 1000000, 10000000}) {
+        cout << "  --- Samples: " << n << " ---" << endl;
+        
+        double seqResult, seqTime;
+        seqTime = timeIt([&]() { seqResult = sequentialMonteCarloPi(n, 42); });
+        printResult("Sequential", seqTime);
+        cout << "    π ≈ " << fixed << setprecision(7) << seqResult << endl;
+    }
 
     cout << "\nAll C++ benchmarks complete!" << endl;
     return 0;
