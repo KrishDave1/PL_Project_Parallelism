@@ -163,6 +163,55 @@ double sequentialMonteCarloPi(int n, unsigned int seed) {
     return 4.0 * hits / n;
 }
 
+double parallelMonteCarloPiAsync(int n, int numWorkers, unsigned int seed) {
+    int samplesPerWorker = n / numWorkers;
+    vector<future<int>> futures;
+    
+    for (int w = 0; w < numWorkers; w++) {
+        futures.push_back(async(launch::async, [=]() {
+            // Each thread gets its own PRNG with a different seed
+            // NOTE: This is less rigorous than Haskell's splittable PRNG
+            mt19937 gen(seed + w * 1000);
+            uniform_real_distribution<double> dist(0.0, 1.0);
+            int hits = 0;
+            for (int i = 0; i < samplesPerWorker; i++) {
+                double x = dist(gen);
+                double y = dist(gen);
+                if (x * x + y * y <= 1.0) hits++;
+            }
+            return hits;
+        }));
+    }
+    
+    int totalHits = 0;
+    for (auto& f : futures) totalHits += f.get();
+    return 4.0 * totalHits / (numWorkers * samplesPerWorker);
+}
+
+// Mutex-based version (equivalent to Haskell's STM version)
+double parallelMonteCarloPiMutex(int n, int numWorkers, unsigned int seed) {
+    int samplesPerWorker = n / numWorkers;
+    atomic<int> totalHits{0};  // Atomic instead of mutex for simplicity
+    
+    vector<thread> threads;
+    for (int w = 0; w < numWorkers; w++) {
+        threads.emplace_back([&, w]() {
+            mt19937 gen(seed + w * 1000);
+            uniform_real_distribution<double> dist(0.0, 1.0);
+            int localHits = 0;
+            for (int i = 0; i < samplesPerWorker; i++) {
+                double x = dist(gen);
+                double y = dist(gen);
+                if (x * x + y * y <= 1.0) localHits++;
+            }
+            totalHits += localHits;  // Atomic add
+        });
+    }
+    
+    for (auto& t : threads) t.join();
+    return 4.0 * totalHits / (numWorkers * samplesPerWorker);
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -300,6 +349,28 @@ int main() {
         seqTime = timeIt([&]() { seqResult = sequentialMonteCarloPi(n, 42); });
         printResult("Sequential", seqTime);
         cout << "    π ≈ " << fixed << setprecision(7) << seqResult << endl;
+
+        for (int workers : {2, 4, 8}) {
+            double parResult;
+            double pt = timeIt([&]() {
+                parResult = parallelMonteCarloPiAsync(n, workers, 42);
+            });
+            string label = "Async (" + to_string(workers) + " workers)";
+            printResult(label, pt);
+            cout << "    π ≈ " << parResult << endl;
+            cout << "    Speedup: " << fixed << setprecision(2) << seqTime / pt << "x" << endl;
+        }
+        
+        {
+            double mutexResult;
+            double mt = timeIt([&]() {
+                mutexResult = parallelMonteCarloPiMutex(n, 4, 42);
+            });
+            printResult("Atomic (4 workers)", mt);
+            cout << "    π ≈ " << mutexResult << endl;
+            cout << "    Speedup: " << fixed << setprecision(2) << seqTime / mt << "x" << endl;
+        }
+        cout << endl;
     }
 
     cout << "\nAll C++ benchmarks complete!" << endl;
