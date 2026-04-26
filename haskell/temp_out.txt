@@ -1,0 +1,188 @@
+
+╔══════════════════════════════════════════════════════════════════╗
+║   Harnessing Functional Programming for Parallelism            ║
+║   Comprehensive Benchmark Suite                                ║
+╚══════════════════════════════════════════════════════════════════╝
+
+======================================================================
+  BENCHMARK 1: Parallel Merge Sort
+======================================================================
+
+  FP Concepts: Eval Monad, rpar/rseq, Strategies, Depth Threshold
+  Parallelism: Task Parallelism (divide-and-conquer)
+
+  --- Input size: 10000 elements ---
+  Sequential Merge Sort                   9.47 ms
+  Parallel (depth=2, 4 tasks)             2.51 ms
+    Speedup: 3.78x
+  Parallel (depth=3, 8 tasks)             3.5 ms
+    Speedup: 2.71x
+  Parallel (depth=4, 16 tasks)            2.63 ms
+    Speedup: 3.61x
+    Correctness check: PASS
+
+  --- Input size: 50000 elements ---
+  Sequential Merge Sort                   65.95 ms
+  Parallel (depth=2, 4 tasks)             21.17 ms
+    Speedup: 3.11x
+  Parallel (depth=3, 8 tasks)             21.13 ms
+    Speedup: 3.12x
+  Parallel (depth=4, 16 tasks)            20.07 ms
+    Speedup: 3.29x
+    Correctness check: PASS
+
+  --- Input size: 100000 elements ---
+  Sequential Merge Sort                   167.9 ms
+  Parallel (depth=2, 4 tasks)             66.05 ms
+    Speedup: 2.54x
+  Parallel (depth=3, 8 tasks)             72.05 ms
+    Speedup: 2.33x
+  Parallel (depth=4, 16 tasks)            48.89 ms
+    Speedup: 3.43x
+    Correctness check: PASS
+
+  --- Input size: 500000 elements ---
+  Sequential Merge Sort                   1.448 s
+  Parallel (depth=2, 4 tasks)             595.87 ms
+    Speedup: 2.43x
+  Parallel (depth=3, 8 tasks)             608.43 ms
+    Speedup: 2.38x
+  Parallel (depth=4, 16 tasks)            505.45 ms
+    Speedup: 2.86x
+    Correctness check: PASS
+
+
+======================================================================
+  BENCHMARK 2: Parallel Matrix Multiplication
+======================================================================
+
+  FP Concepts: Data Parallelism, parMap, Strategies, Chunking
+  Parallelism: Data Parallelism (same operation on different data)
+
+  --- Matrix size: 64x64 ---
+  Sequential Matrix Multiply              2.16 ms
+  Parallel (parMap over rows)             2.4 ms
+    Speedup: 0.9x
+  Parallel (chunked, 4 chunks)            1.12 ms
+    Speedup: 1.93x
+  Parallel (chunked, 8 chunks)            1.62 ms
+    Speedup: 1.34x
+
+
+  --- Matrix size: 128x128 ---
+  Sequential Matrix Multiply              18.68 ms
+  Parallel (parMap over rows)             5.65 ms
+    Speedup: 3.3x
+  Parallel (chunked, 4 chunks)            5.26 ms
+    Speedup: 3.55x
+  Parallel (chunked, 8 chunks)            8.75 ms
+    Speedup: 2.14x
+
+
+  --- Matrix size: 256x256 ---
+  Sequential Matrix Multiply              170.28 ms
+  Parallel (parMap over rows)             51.7 ms
+    Speedup: 3.29x
+  Parallel (chunked, 4 chunks)            46.67 ms
+    Speedup: 3.65x
+  Parallel (chunked, 8 chunks)            46.77 ms
+    Speedup: 3.64x
+
+
+
+======================================================================
+  BENCHMARK 3: Parallel MapReduce Word Count
+======================================================================
+
+  FP Concepts: Par Monad, Higher-Order Functions, Map-Reduce Pattern
+  Parallelism: Data Parallelism (partition data, parallel map, reduce)
+
+  --- Text size: ~155000 words ---
+  Sequential Word Count                   83.37 ms
+    Unique words: 27
+    Top 5: [("the",15000),("and",10000),("parallelism",10000),("brown",5000),("constructs",5000)]
+  Parallel (2 chunks)                     145.3 ms
+    Speedup: 0.57x
+    Correctness: PASS
+  Parallel (4 chunks)                     155.99 ms
+    Speedup: 0.53x
+    Correctness: PASS
+  Parallel (8 chunks)                     140.4 ms
+    Speedup: 0.59x
+    Correctness: PASS
+
+  --- Text size: ~464998 words ---
+  Sequential Word Count                   268.88 ms
+    Unique words: 27
+    Top 5: [("the",45000),("and",30000),("parallelism",30000),("brown",15000),("constructs",15000)]
+  Parallel (2 chunks)                     534.99 ms
+    Speedup: 0.5x
+    Correctness: PASS
+  Parallel (4 chunks)                     489.96 ms
+    Speedup: 0.55x
+    Correctness: PASS
+  Parallel (8 chunks)                     459.52 ms
+    Speedup: 0.59x
+    Correctness: PASS
+
+
+======================================================================
+  BENCHMARK 4: Monte Carlo Pi Estimation
+======================================================================
+
+  FP Concepts: Async (Futures/Promises), STM, Pure Splittable RNG
+  Parallelism: Embarrassingly Parallel (independent samples)
+
+  --- Samples: 100000 ---
+  Sequential                              1.11 ms
+    π ≈ 3.1486
+    Error: 7.007346410206949e-3
+  Async (2 workers)                       570.0us
+    π ≈ 3.14928
+    Speedup: 1.95x
+  Async (4 workers)                       398.0us
+    π ≈ 3.15264
+    Speedup: 2.79x
+  Async (8 workers)                       468.0us
+    π ≈ 3.14624
+    Speedup: 2.38x
+  STM (4 workers)                         1.22 ms
+    π ≈ 3.15264
+    Speedup: 0.91x
+
+  --- Samples: 1000000 ---
+  Sequential                              12.04 ms
+    π ≈ 3.139428
+    Error: 2.1646535897930086e-3
+  Async (2 workers)                       5.44 ms
+    π ≈ 3.14162
+    Speedup: 2.21x
+  Async (4 workers)                       3.2 ms
+    π ≈ 3.141588
+    Speedup: 3.76x
+  Async (8 workers)                       4.38 ms
+    π ≈ 3.141036
+    Speedup: 2.74x
+  STM (4 workers)                         11.74 ms
+    π ≈ 3.141588
+    Speedup: 1.03x
+
+  --- Samples: 10000000 ---
+  Sequential                              108.82 ms
+    π ≈ 3.1408052
+    Error: 7.874535897931523e-4
+  Async (2 workers)                       56.7 ms
+    π ≈ 3.14115
+    Speedup: 1.92x
+  Async (4 workers)                       31.11 ms
+    π ≈ 3.1411968
+    Speedup: 3.5x
+  Async (8 workers)                       53.25 ms
+    π ≈ 3.141556
+    Speedup: 2.04x
+  STM (4 workers)                         117.93 ms
+    π ≈ 3.1411968
+    Speedup: 0.92x
+
+
+All benchmarks complete! Results saved to results/ directory.

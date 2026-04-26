@@ -31,6 +31,8 @@ import Matrix.SequentialMatMul (matMul)
 import Matrix.ParallelMatMul (parallelMatMul, parallelMatMulChunked)
 import MapReduce.SequentialWordCount (wordCount, topN)
 import MapReduce.ParallelWordCount (parallelWordCount)
+import MonteCarlo.SequentialPi (estimatePi)
+import MonteCarlo.ParallelPi (parallelPiAsync, parallelPiSTM)
 
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
@@ -46,6 +48,7 @@ main = do
     benchMergeSort
     benchMatMul
     benchWordCount
+    benchMonteCarlo
 
     
     putStrLn ""
@@ -195,6 +198,47 @@ benchWordCount = do
         
         putStrLn ""
         ) textSizes
+
+-- ============================================================================
+-- Benchmark 4: Monte Carlo Pi Estimation
+-- ============================================================================
+
+benchMonteCarlo :: IO ()
+benchMonteCarlo = do
+    printHeader "BENCHMARK 4: Monte Carlo Pi Estimation"
+    putStrLn "  FP Concepts: Async (Futures/Promises), STM, Pure Splittable RNG"
+    putStrLn "  Parallelism: Embarrassingly Parallel (independent samples)"
+    putStrLn ""
+    
+    let sampleSizes = [100000, 1000000, 10000000]
+    
+    mapM_ (\n -> do
+        putStrLn $ "  --- Samples: " ++ show n ++ " ---"
+        
+        -- Sequential
+        (seqResult, seqTime) <- timeIt (return $ estimatePi 42 n)
+        printResult "Sequential" seqTime
+        putStrLn $ "    π ≈ " ++ show seqResult
+        putStrLn $ "    Error: " ++ show (abs (seqResult - pi))
+        
+        -- Parallel (Async) with different worker counts
+        mapM_ (\workers -> do
+            (parResult, parTime) <- timeIt (parallelPiAsync workers n 42)
+            let speedup = realToFrac seqTime / realToFrac parTime :: Double
+            printResult ("Async (" ++ show workers ++ " workers)") parTime
+            putStrLn $ "    π ≈ " ++ show parResult
+            putStrLn $ "    Speedup: " ++ show (roundTo 2 speedup) ++ "x"
+            ) [2, 4, 8]
+        
+        -- Parallel (STM)
+        (stmResult, stmTime) <- timeIt (parallelPiSTM 4 n 42)
+        let stmSpeedup = realToFrac seqTime / realToFrac stmTime :: Double
+        printResult "STM (4 workers)" stmTime
+        putStrLn $ "    π ≈ " ++ show stmResult
+        putStrLn $ "    Speedup: " ++ show (roundTo 2 stmSpeedup) ++ "x"
+        
+        putStrLn ""
+        ) sampleSizes
 
 roundTo :: Int -> Double -> Double
 roundTo n x = fromIntegral (round (x * 10^n) :: Int) / fromIntegral (10^n :: Int)
