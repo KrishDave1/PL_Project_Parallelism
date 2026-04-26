@@ -222,6 +222,26 @@ def parallel_word_count(text, num_workers=4):
         total += result
     return total
 
+def sequential_monte_carlo_pi(n, seed=42):
+    """
+    Sequential Monte Carlo Pi estimation.
+    
+    COMPARISON WITH HASKELL:
+      Haskell: Uses pure SplitMix PRNG (no mutable state)
+      Python:  Uses random module (mutable internal state)
+      
+    Python's random module is NOT thread-safe — must use separate
+    Random instances in each process (similar problem as C++).
+    """
+    rng = random.Random(seed)
+    hits = 0
+    for _ in range(n):
+        x = rng.random()
+        y = rng.random()
+        if x * x + y * y <= 1.0:
+            hits += 1
+    return 4.0 * hits / n
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
@@ -297,6 +317,16 @@ def main():
             print_result(f"Parallel ({workers} workers)", par_time)
             print(f"    Speedup: {speedup:.2f}x")
         print()
+    
+    # ===== PROBLEM 4: Monte Carlo Pi =====
+    print_header("BENCHMARK 4: Monte Carlo Pi (multiprocessing.Pool)")
+    
+    for n in [100000, 1000000, 10000000]:
+        print(f"  --- Samples: {n} ---")
+        
+        seq_result, seq_time = time_it(sequential_monte_carlo_pi, n)
+        print_result("Sequential", seq_time)
+        print(f"    π ≈ {seq_result:.7f}")
         
         
     print("\nAll Python benchmarks complete!")
