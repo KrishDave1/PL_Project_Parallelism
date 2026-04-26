@@ -4,6 +4,7 @@
 #include <random>
 #include <iomanip>
 #include <future>
+#include <map>
 
 using namespace std;
 using namespace chrono;
@@ -96,6 +97,21 @@ vector<vector<double>> parallelMatMul(const vector<vector<double>>& a,
     return c;
 }
 
+map<string, int> sequentialWordCount(const string& text) {
+    map<string, int> freq;
+    string word;
+    for (char c : text) {
+        if (isalpha(c)) {
+            word += tolower(c);
+        } else if (!word.empty()) {
+            freq[word]++;
+            word.clear();
+        }
+    }
+    if (!word.empty()) freq[word]++;
+    return freq;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -112,6 +128,22 @@ vector<vector<double>> generateRandomMatrix(int n, int seed) {
         for (int j = 0; j < n; j++)
             m[i][j] = dist(gen);
     return m;
+}
+
+string generateText(int numWords) {
+    vector<string> words = {
+        "the", "quick", "brown", "fox", "jumps", "over",
+        "functional", "programming", "parallelism",
+        "haskell", "purity", "immutability"
+    };
+    mt19937 gen(42);
+    uniform_int_distribution<int> dist(0, words.size() - 1);
+    string text;
+    for (int i = 0; i < numWords; i++) {
+        if (i > 0) text += " ";
+        text += words[dist(gen)];
+    }
+    return text;
 }
 
 void printResult(const string& label, double timeMs) {
@@ -182,6 +214,19 @@ int main() {
             cout << "    Speedup: " << fixed << setprecision(2) << seqTime / pt << "x" << endl;
         }
         cout << endl;
+    }
+
+    // ===== PROBLEM 3: Word Count =====
+    cout << "======================================================================" << endl;
+    cout << "  BENCHMARK 3: Word Count (std::async)" << endl;
+    cout << "======================================================================\n" << endl;
+    
+    for (int numWords : {155000, 465000}) {
+        cout << "  --- Text size: ~" << numWords << " words ---" << endl;
+        string text = generateText(numWords);
+        
+        double seqTime = timeIt([&]() { sequentialWordCount(text); });
+        printResult("Sequential", seqTime);
     }
     cout << "\nAll C++ benchmarks complete!" << endl;
     return 0;
