@@ -112,6 +112,45 @@ map<string, int> sequentialWordCount(const string& text) {
     return freq;
 }
 
+map<string, int> parallelWordCount(const string& text, int numThreads) {
+    int chunkSize = text.size() / numThreads;
+    vector<future<map<string, int>>> futures;
+    
+    for (int t = 0; t < numThreads; t++) {
+        int start = t * chunkSize;
+        int end = (t == numThreads - 1) ? text.size() : (t + 1) * chunkSize;
+        
+        // Adjust boundaries to not split words
+        while (end < (int)text.size() && isalpha(text[end])) end++;
+        
+        futures.push_back(async(launch::async, [&text, start, end]() {
+            map<string, int> local;
+            string word;
+            for (int i = start; i < end; i++) {
+                char c = text[i];
+                if (isalpha(c)) {
+                    word += tolower(c);
+                } else if (!word.empty()) {
+                    local[word]++;
+                    word.clear();
+                }
+            }
+            if (!word.empty()) local[word]++;
+            return local;
+        }));
+    }
+    
+    // Reduce: merge all local maps
+    map<string, int> result;
+    for (auto& f : futures) {
+        auto local = f.get();
+        for (auto& [word, count] : local) {
+            result[word] += count;
+        }
+    }
+    return result;
+}
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -227,7 +266,18 @@ int main() {
         
         double seqTime = timeIt([&]() { sequentialWordCount(text); });
         printResult("Sequential", seqTime);
+
+        for (int threads : {2, 4, 8}) {
+            double pt = timeIt([&]() { parallelWordCount(text, threads); });
+            string label = "Parallel (" + to_string(threads) + " threads)";
+            printResult(label, pt);
+            cout << "    Speedup: " << fixed << setprecision(2) << seqTime / pt << "x" << endl;
+        }
+        cout << endl;
     }
+
+
+
     cout << "\nAll C++ benchmarks complete!" << endl;
     return 0;
 }
