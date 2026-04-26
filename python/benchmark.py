@@ -1,7 +1,42 @@
+"""
+================================================================================
+  Python Imperative Comparison: Parallel Algorithms
+================================================================================
+
+PURPOSE:
+  This file implements the same four computational problems in Python to serve
+  as a second IMPERATIVE BASELINE for comparison with Haskell implementations.
+
+  Python adds an interesting dimension to the comparison:
+  - GIL (Global Interpreter Lock) prevents true multi-threading for CPU-bound work
+  - Must use multiprocessing (separate processes) for CPU parallelism
+  - This means inter-process communication overhead (pickling/unpickling)
+  - Shows WHY language-level parallelism support matters
+
+KEY OBSERVATIONS:
+  1. Python's GIL makes threading useless for CPU-bound parallelism
+  2. multiprocessing.Pool adds significant overhead (process creation, IPC)
+  3. Python is 10-100x slower than Haskell/C++ for CPU-bound work
+  4. BUT: Python code is very readable — good for showing what we're computing
+
+RUN:
+  python3 benchmark.py
+
+================================================================================
+"""
+
 import time
 import random
-from multiprocessing import Pool
+import math
+import sys
+from multiprocessing import Pool, cpu_count
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from functools import reduce
 from collections import Counter
+
+# ============================================================================
+# Timing utility
+# ============================================================================
 
 def time_it(func, *args):
     """
@@ -13,12 +48,14 @@ def time_it(func, *args):
     elapsed = (time.perf_counter() - start) * 1000  # ms
     return result, elapsed
 
+
 def print_header(title):
     print()
     print("=" * 70)
     print(f"  {title}")
     print("=" * 70)
     print()
+
 
 def print_result(label, time_ms):
     if time_ms < 1.0:
@@ -27,6 +64,11 @@ def print_result(label, time_ms):
         print(f"  {label:<40}{time_ms:.2f} ms")
     else:
         print(f"  {label:<40}{time_ms/1000:.3f} s")
+
+
+# ============================================================================
+# PROBLEM 1: Merge Sort
+# ============================================================================
 
 def merge(left, right):
     """
@@ -67,6 +109,7 @@ def sequential_merge_sort(arr):
     left = sequential_merge_sort(arr[:mid])
     right = sequential_merge_sort(arr[mid:])
     return merge(left, right)
+
 
 def _sort_chunk(arr):
     """Worker function for parallel sort (must be top-level for pickling)."""
@@ -116,6 +159,11 @@ def parallel_merge_sort(arr, num_workers=4):
     
     return sorted_chunks[0]
 
+
+# ============================================================================
+# PROBLEM 2: Matrix Multiplication
+# ============================================================================
+
 def sequential_mat_mul(a, b):
     """
     Sequential matrix multiplication using nested loops.
@@ -133,6 +181,7 @@ def sequential_mat_mul(a, b):
             for j in range(n):
                 c[i][j] += a[i][k] * b[k][j]
     return c
+
 
 def _compute_rows(args):
     """Worker: compute a chunk of result rows."""
@@ -166,6 +215,11 @@ def parallel_mat_mul(a, b, num_workers=4):
     
     return [row for chunk in results for row in chunk]
 
+
+# ============================================================================
+# PROBLEM 3: Word Count (MapReduce)
+# ============================================================================
+
 def sequential_word_count(text):
     """
     Sequential word count using Counter.
@@ -188,6 +242,7 @@ def _count_chunk(text):
     words = [''.join(c for c in w if c.isalpha()) for w in words]
     words = [w for w in words if w]
     return Counter(words)
+
 
 def parallel_word_count(text, num_workers=4):
     """
@@ -222,6 +277,11 @@ def parallel_word_count(text, num_workers=4):
         total += result
     return total
 
+
+# ============================================================================
+# PROBLEM 4: Monte Carlo Pi Estimation
+# ============================================================================
+
 def sequential_monte_carlo_pi(n, seed=42):
     """
     Sequential Monte Carlo Pi estimation.
@@ -241,6 +301,7 @@ def sequential_monte_carlo_pi(n, seed=42):
         if x * x + y * y <= 1.0:
             hits += 1
     return 4.0 * hits / n
+
 
 def _monte_carlo_worker(args):
     """Worker: count hits in a chunk of samples."""
@@ -279,13 +340,20 @@ def parallel_monte_carlo_pi(n, num_workers=4, seed=42):
     total_hits = sum(results)
     return 4.0 * total_hits / (num_workers * samples_per_worker)
 
+
+# ============================================================================
+# Data Generation
+# ============================================================================
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
 
+
 def generate_random_matrix(n, seed=42):
     rng = random.Random(seed)
     return [[rng.uniform(0, 100) for _ in range(n)] for _ in range(n)]
+
 
 def generate_text(num_words, seed=42):
     word_list = [
@@ -296,16 +364,21 @@ def generate_text(num_words, seed=42):
     rng = random.Random(seed)
     return " ".join(rng.choice(word_list) for _ in range(num_words))
 
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
 def main():
     print()
     print("╔══════════════════════════════════════════════════════════════════╗")
-    print("║   Python Imperative Comparison Benchmarks                        ║")
-    print("║   NOTE: Uses multiprocessing (not threading) due to GIL          ║")
+    print("║   Python Imperative Comparison Benchmarks                      ║")
+    print("║   NOTE: Uses multiprocessing (not threading) due to GIL        ║")
     print("╚══════════════════════════════════════════════════════════════════╝")
-
+    
     # ===== PROBLEM 1: Merge Sort =====
     print_header("BENCHMARK 1: Merge Sort (multiprocessing.Pool)")
-
+    
     for size in [10000, 50000, 100000]:
         print(f"  --- Input size: {size} elements ---")
         arr = generate_random_list(size)
@@ -321,7 +394,8 @@ def main():
             correct = seq_result == par_result
             print(f"    Correctness: {'PASS' if correct else 'FAIL'}")
         print()
-
+    
+    # ===== PROBLEM 2: Matrix Multiplication =====
     print_header("BENCHMARK 2: Matrix Multiplication (multiprocessing.Pool)")
     
     for size in [64, 128]:
@@ -331,23 +405,25 @@ def main():
         
         _, seq_time = time_it(sequential_mat_mul, a, b)
         print_result("Sequential", seq_time)
-
+        
         for workers in [2, 4]:
             _, par_time = time_it(parallel_mat_mul, a, b, workers)
             speedup = seq_time / par_time if par_time > 0 else 0
             print_result(f"Parallel ({workers} workers)", par_time)
             print(f"    Speedup: {speedup:.2f}x")
         print()
-
+    
+    # ===== PROBLEM 3: Word Count =====
     print_header("BENCHMARK 3: Word Count (multiprocessing.Pool)")
     
-    for num_words in [50000, 150000]:
+    for num_words in [155000, 465000]:
         print(f"  --- Text size: ~{num_words} words ---")
         text = generate_text(num_words)
         
         seq_result, seq_time = time_it(sequential_word_count, text)
         print_result("Sequential", seq_time)
         print(f"    Top 5: {seq_result.most_common(5)}")
+        
         for workers in [2, 4]:
             par_result, par_time = time_it(parallel_word_count, text, workers)
             speedup = seq_time / par_time if par_time > 0 else 0
@@ -364,7 +440,7 @@ def main():
         seq_result, seq_time = time_it(sequential_monte_carlo_pi, n)
         print_result("Sequential", seq_time)
         print(f"    π ≈ {seq_result:.7f}")
-
+        
         for workers in [2, 4, 8]:
             par_result, par_time = time_it(parallel_monte_carlo_pi, n, workers)
             speedup = seq_time / par_time if par_time > 0 else 0
@@ -372,9 +448,9 @@ def main():
             print(f"    π ≈ {par_result:.7f}")
             print(f"    Speedup: {speedup:.2f}x")
         print()
-        
-        
-    print("\nAll Python benchmarks complete!")
+    
+    print("All Python benchmarks complete!")
+
 
 if __name__ == "__main__":
     main()

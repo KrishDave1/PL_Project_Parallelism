@@ -1,13 +1,54 @@
+/*
+================================================================================
+  C++ Imperative Comparison: Parallel Algorithms
+================================================================================
+
+PURPOSE:
+  This file implements the same four computational problems in C++ to serve
+  as an IMPERATIVE BASELINE for comparison with our Haskell implementations.
+
+  The key differences to observe are:
+  1. SHARED MUTABLE STATE: C++ threads share memory, requiring explicit
+     synchronization (mutexes, atomics) to prevent data races.
+  2. MANUAL THREAD MANAGEMENT: We must create, join, and manage threads.
+  3. IN-PLACE MUTATION: C++ sorts and modifies arrays in place.
+  4. EXPLICIT SYNCHRONIZATION: Locks, condition variables, atomics.
+
+  These are the "pain points" that FP's purity eliminates.
+
+COMPILE:
+  g++ -std=c++17 -O2 -pthread -o benchmark benchmark.cpp
+
+RUN:
+  ./benchmark
+================================================================================
+*/
+
 #include <iostream>
-#include <chrono>
 #include <vector>
-#include <random>
-#include <iomanip>
+#include <algorithm>
+#include <chrono>
+#include <thread>
 #include <future>
+#include <random>
+#include <mutex>
 #include <map>
+#include <string>
+#include <sstream>
+#include <numeric>
+#include <functional>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <atomic>
+#include <cctype>
 
 using namespace std;
 using namespace chrono;
+
+// ============================================================================
+// Timing utility
+// ============================================================================
 
 template <typename Func>
 double timeIt(Func f) {
@@ -17,6 +58,23 @@ double timeIt(Func f) {
     return duration_cast<microseconds>(end - start).count() / 1000.0; // ms
 }
 
+// ============================================================================
+// PROBLEM 1: Merge Sort
+// ============================================================================
+
+/*
+  IMPERATIVE MERGE SORT (Sequential)
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - IN-PLACE: We modify the array directly (no new allocations per level)
+  - MUTABLE: The 'temp' buffer is reused across merge operations
+  - INDEX-BASED: We use array indices, not recursive list splitting
+  
+  This is more memory-efficient than the Haskell version but:
+  - Harder to reason about correctness (aliasing, buffer overflows)
+  - Cannot safely share arrays between threads without synchronization
+  - Must carefully manage the temp buffer's lifecycle
+*/
 void merge(vector<int>& arr, int left, int mid, int right, vector<int>& temp) {
     int i = left, j = mid + 1, k = left;
     while (i <= mid && j <= right) {
@@ -36,6 +94,26 @@ void sequentialMergeSort(vector<int>& arr, int left, int right, vector<int>& tem
     merge(arr, left, mid, right, temp);
 }
 
+/*
+  IMPERATIVE PARALLEL MERGE SORT
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - Uses std::async to spawn threads (similar to Haskell's 'async')
+  - SHARED MUTABLE STATE: Both threads write to the SAME array
+    (safe here because they write to different index ranges)
+  - Must explicitly manage thread lifecycle (future.get() = join)
+  - Depth threshold to avoid thread explosion (same concept as Haskell)
+  
+  DANGER ZONES:
+  - If we mess up index ranges, we get data races → undefined behavior
+  - No type-system protection against shared mutable access
+  - Must remember to call .get() on futures (else threads are detached)
+  
+  CONTRAST WITH HASKELL:
+  - Haskell's rpar creates lightweight sparks, not OS threads
+  - Haskell's purity guarantees no data races AT COMPILE TIME
+  - C++ requires the programmer to manually verify thread safety
+*/
 void parallelMergeSort(vector<int>& arr, int left, int right, vector<int>& temp, int depth) {
     if (left >= right) return;
     if (depth <= 0) {
@@ -61,6 +139,23 @@ void parallelMergeSort(vector<int>& arr, int left, int right, vector<int>& temp,
     merge(arr, left, mid, right, temp);
 }
 
+// ============================================================================
+// PROBLEM 2: Matrix Multiplication
+// ============================================================================
+
+/*
+  IMPERATIVE MATRIX MULTIPLICATION (Sequential)
+  
+  Three nested for-loops — the classic O(n³) algorithm.
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - IN-PLACE: Result matrix is pre-allocated and filled
+  - INDEX-BASED: No list comprehensions, just index arithmetic
+  - CACHE-FRIENDLY: Row-major access pattern is efficient
+  
+  The C++ version is MUCH faster than Haskell's list-based version
+  because arrays have better cache locality than linked lists.
+*/
 vector<vector<double>> sequentialMatMul(const vector<vector<double>>& a,
                                         const vector<vector<double>>& b) {
     int n = a.size();
@@ -72,6 +167,18 @@ vector<vector<double>> sequentialMatMul(const vector<vector<double>>& a,
     return c;
 }
 
+/*
+  IMPERATIVE PARALLEL MATRIX MULTIPLICATION
+  
+  Uses std::thread to parallelize the outer loop.
+  Each thread computes a chunk of rows.
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - Haskell: parMap rdeepseq computeRow a (one line change!)
+  - C++: Must manually partition rows, create threads, join them
+  - C++: Threads share the output matrix (safe: non-overlapping writes)
+  - C++: Must carefully compute chunk boundaries
+*/
 vector<vector<double>> parallelMatMul(const vector<vector<double>>& a,
                                        const vector<vector<double>>& b,
                                        int numThreads) {
@@ -97,6 +204,28 @@ vector<vector<double>> parallelMatMul(const vector<vector<double>>& a,
     return c;
 }
 
+// ============================================================================
+// PROBLEM 3: Word Count (MapReduce)
+// ============================================================================
+
+/*
+  IMPERATIVE WORD COUNT
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - Uses mutable unordered_map (hash map) for counting
+  - Mutation-based: increment counts in place
+  - String manipulation is manual (tolower, isalpha)
+  
+  PARALLEL VERSION:
+  - Each thread counts words in its chunk → local map
+  - Merge all local maps at the end
+  - Must use mutex if threads share a map (or use thread-local maps)
+  
+  CONTRAST WITH HASKELL:
+  - Haskell's Map.insertWith (+) is pure: creates new map each time
+  - Haskell's tokenize is a pipeline of pure transformations
+  - C++ modifies strings in place and imperatively builds the map
+*/
 map<string, int> sequentialWordCount(const string& text) {
     map<string, int> freq;
     string word;
@@ -151,6 +280,27 @@ map<string, int> parallelWordCount(const string& text, int numThreads) {
     return result;
 }
 
+// ============================================================================
+// PROBLEM 4: Monte Carlo Pi Estimation
+// ============================================================================
+
+/*
+  IMPERATIVE MONTE CARLO PI
+  
+  KEY DIFFERENCES FROM HASKELL:
+  - MUTABLE PRNG: std::mt19937 has mutable internal state
+  - SHARED PRNG PROBLEM: Cannot safely share one PRNG across threads
+    → Must create separate PRNGs per thread (using different seeds)
+    → No elegant 'split' operation like Haskell's SplitMix
+  
+  PARALLEL VERSION:
+  - Uses std::async with per-thread PRNGs (seeded by thread index)
+  - Alternative: use atomic counter (shown in STM-equivalent version)
+  
+  CONTRAST WITH HASKELL:
+  - Haskell: let (gen1, gen2) = split gen  ← pure, deterministic split
+  - C++: mt19937 gen(seed + threadId)      ← ad-hoc, less rigorous
+*/
 double sequentialMonteCarloPi(int n, unsigned int seed) {
     mt19937 gen(seed);
     uniform_real_distribution<double> dist(0.0, 1.0);
@@ -212,6 +362,10 @@ double parallelMonteCarloPiMutex(int n, int numWorkers, unsigned int seed) {
     return 4.0 * totalHits / (numWorkers * samplesPerWorker);
 }
 
+// ============================================================================
+// Random Data Generation
+// ============================================================================
+
 vector<int> generateRandomList(int n, int seed) {
     mt19937 gen(seed);
     uniform_int_distribution<int> dist(1, n * 10);
@@ -246,6 +400,10 @@ string generateText(int numWords) {
     return text;
 }
 
+// ============================================================================
+// Helper: Print formatted result
+// ============================================================================
+
 void printResult(const string& label, double timeMs) {
     cout << "  " << left << setw(40) << label;
     if (timeMs < 1.0) cout << fixed << setprecision(0) << timeMs * 1000 << "us" << endl;
@@ -253,9 +411,15 @@ void printResult(const string& label, double timeMs) {
     else cout << fixed << setprecision(3) << timeMs / 1000.0 << " s" << endl;
 }
 
+// ============================================================================
+// MAIN: Run all benchmarks
+// ============================================================================
+
 int main() {
     cout << endl;
-    cout << "C++ Imperative Comparison Benchmarks" << endl;
+    cout << "╔══════════════════════════════════════════════════════════════════╗" << endl;
+    cout << "║   C++ Imperative Comparison Benchmarks                         ║" << endl;
+    cout << "╚══════════════════════════════════════════════════════════════════╝" << endl;
     
     // ===== PROBLEM 1: Merge Sort =====
     cout << "\n======================================================================" << endl;
@@ -273,6 +437,7 @@ int main() {
                 sequentialMergeSort(arr, 0, size - 1, temp);
             });
             printResult("Sequential Merge Sort", t);
+            
             // Parallel
             for (int depth : {2, 3, 4}) {
                 auto arr2 = original;
@@ -291,6 +456,7 @@ int main() {
         }
         cout << endl;
     }
+    
     // ===== PROBLEM 2: Matrix Multiplication =====
     cout << "======================================================================" << endl;
     cout << "  BENCHMARK 2: Matrix Multiplication (std::thread)" << endl;
@@ -306,7 +472,7 @@ int main() {
             seqTime = timeIt([&]() { sequentialMatMul(a, b); });
             printResult("Sequential", seqTime);
         }
-
+        
         for (int threads : {2, 4, 8}) {
             double pt = timeIt([&]() { parallelMatMul(a, b, threads); });
             string label = "Parallel (" + to_string(threads) + " threads)";
@@ -315,7 +481,7 @@ int main() {
         }
         cout << endl;
     }
-
+    
     // ===== PROBLEM 3: Word Count =====
     cout << "======================================================================" << endl;
     cout << "  BENCHMARK 3: Word Count (std::async)" << endl;
@@ -327,7 +493,7 @@ int main() {
         
         double seqTime = timeIt([&]() { sequentialWordCount(text); });
         printResult("Sequential", seqTime);
-
+        
         for (int threads : {2, 4, 8}) {
             double pt = timeIt([&]() { parallelWordCount(text, threads); });
             string label = "Parallel (" + to_string(threads) + " threads)";
@@ -336,7 +502,7 @@ int main() {
         }
         cout << endl;
     }
-
+    
     // ===== PROBLEM 4: Monte Carlo Pi =====
     cout << "======================================================================" << endl;
     cout << "  BENCHMARK 4: Monte Carlo Pi (std::async + atomic)" << endl;
@@ -349,7 +515,7 @@ int main() {
         seqTime = timeIt([&]() { seqResult = sequentialMonteCarloPi(n, 42); });
         printResult("Sequential", seqTime);
         cout << "    π ≈ " << fixed << setprecision(7) << seqResult << endl;
-
+        
         for (int workers : {2, 4, 8}) {
             double parResult;
             double pt = timeIt([&]() {
@@ -372,7 +538,7 @@ int main() {
         }
         cout << endl;
     }
-
-    cout << "\nAll C++ benchmarks complete!" << endl;
+    
+    cout << "All C++ benchmarks complete!" << endl;
     return 0;
 }
