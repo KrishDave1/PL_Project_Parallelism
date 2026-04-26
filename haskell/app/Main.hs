@@ -31,6 +31,15 @@ import Matrix.SequentialMatMul (matMul)
 import Matrix.ParallelMatMul (parallelMatMul, parallelMatMulChunked)
 import MapReduce.SequentialWordCount (wordCount, topN)
 import MapReduce.ParallelWordCount (parallelWordCount)
+import MonteCarlo.SequentialPi (estimatePi)
+import MonteCarlo.ParallelPi (parallelPiAsync, parallelPiSTM)
+
+import KMeans.SequentialKMeans
+import KMeans.ParallelKMeans
+import System.Random (mkStdGen, uniformR)
+
+import NumericalIntegration.SequentialIntegration
+import NumericalIntegration.ParallelIntegration
 
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
@@ -46,7 +55,9 @@ main = do
     benchMergeSort
     benchMatMul
     benchWordCount
-
+    benchMonteCarlo
+    benchKMeans
+    benchIntegration
     
     putStrLn ""
     putStrLn "All benchmarks complete! Results saved to results/ directory."
@@ -143,7 +154,6 @@ benchMatMul = do
         putStrLn $ "    Speedup: " ++ show (roundTo 2 speedupC8) ++ "x"
         
         putStrLn ""
-        putStrLn ""
         ) sizes
 
 -- ============================================================================
@@ -195,6 +205,149 @@ benchWordCount = do
         
         putStrLn ""
         ) textSizes
+
+-- ============================================================================
+-- Benchmark 4: Monte Carlo Pi Estimation
+-- ============================================================================
+
+benchMonteCarlo :: IO ()
+benchMonteCarlo = do
+    printHeader "BENCHMARK 4: Monte Carlo Pi Estimation"
+    putStrLn "  FP Concepts: Async (Futures/Promises), STM, Pure Splittable RNG"
+    putStrLn "  Parallelism: Embarrassingly Parallel (independent samples)"
+    putStrLn ""
+    
+    let sampleSizes = [100000, 1000000, 10000000]
+    
+    mapM_ (\n -> do
+        putStrLn $ "  --- Samples: " ++ show n ++ " ---"
+        
+        -- Sequential
+        (seqResult, seqTime) <- timeIt (return $ estimatePi 42 n)
+        printResult "Sequential" seqTime
+        putStrLn $ "    π ≈ " ++ show seqResult
+        putStrLn $ "    Error: " ++ show (abs (seqResult - pi))
+        
+        -- Parallel (Async) with different worker counts
+        mapM_ (\workers -> do
+            (parResult, parTime) <- timeIt (parallelPiAsync workers n 42)
+            let speedup = realToFrac seqTime / realToFrac parTime :: Double
+            printResult ("Async (" ++ show workers ++ " workers)") parTime
+            putStrLn $ "    π ≈ " ++ show parResult
+            putStrLn $ "    Speedup: " ++ show (roundTo 2 speedup) ++ "x"
+            ) [2, 4, 8]
+        
+        -- Parallel (STM)
+        (stmResult, stmTime) <- timeIt (parallelPiSTM 4 n 42)
+        let stmSpeedup = realToFrac seqTime / realToFrac stmTime :: Double
+        printResult "STM (4 workers)" stmTime
+        putStrLn $ "    π ≈ " ++ show stmResult
+        putStrLn $ "    Speedup: " ++ show (roundTo 2 stmSpeedup) ++ "x"
+        
+        putStrLn ""
+        ) sampleSizes
+
+-- ============================================================================
+-- Helpers
+-- ============================================================================
+
+-- ============================================================================
+-- Benchmark 5: K-Means Clustering
+-- ============================================================================
+
+-- | Generate random 2D points clustered around K centers
+generateClusteredData :: Int -> Int -> Int -> [Point]
+generateClusteredData seed k totalPoints =
+    let pointsPerCluster = totalPoints `div` k
+        -- Generate K cluster centers evenly spaced
+        centers = [(100 * cos (2 * pi * fromIntegral i / fromIntegral k),
+                    100 * sin (2 * pi * fromIntegral i / fromIntegral k))
+                  | i <- [0..k-1]]
+    in concatMap (\(cx, cy) -> generateAround seed cx cy pointsPerCluster) centers
+  where
+    generateAround s cx cy n =
+        let go _ [] = []
+            go gen (_:rest) =
+                let (dx, gen')  = uniformR (-20.0, 20.0 :: Double) gen
+                    (dy, gen'') = uniformR (-20.0, 20.0 :: Double) gen'
+                in (cx + dx, cy + dy) : go gen'' rest
+        in go (mkStdGen (s + round cx + round cy)) [1..n]
+
+benchKMeans :: IO ()
+benchKMeans = do
+    printHeader "BENCHMARK 5: K-Means Clustering (Machine Learning)"
+    putStrLn "  FP Concepts: Immutable state, higher-order map, Strategies"
+    putStrLn "  Parallelism: Data Parallelism (parallel assignment step)"
+    putStrLn ""
+    
+    let k = 5  -- number of clusters
+    
+    mapM_ (\numPoints -> do
+        putStrLn $ "  --- " ++ show numPoints ++ " points, K=" ++ show k ++ " ---"
+        
+        let points = generateClusteredData 42 k numPoints
+        _ <- evaluate (force points)
+        
+        -- Use first K points as initial centroids (simple initialization)
+        let initCentroids = take k points
+        
+        -- Sequential
+        (seqResult, seqTime) <- timeIt (return $ kMeans 100 0.001 initCentroids points)
+        printResult "Sequential K-Means" seqTime
+        let round' x = fromIntegral (round (x * 100) :: Int) / 100.0 :: Double
+        putStrLn $ "    Final centroids: " ++ show (map (\(x,y) -> (round' x, round' y)) seqResult)
+        
+        -- Parallel with different chunk sizes
+        mapM_ (\chunks -> do
+            let chunkSize = max 1 (numPoints `div` chunks)
+            (_parResult, parTime) <- timeIt (return $ parallelKMeans chunkSize 100 0.001 initCentroids points)
+            let speedup = realToFrac seqTime / realToFrac parTime :: Double
+            printResult ("Parallel (" ++ show chunks ++ " chunks)") parTime
+            putStrLn $ "    Speedup: " ++ show (roundTo 2 speedup) ++ "x"
+            ) [2, 4, 8]
+        
+        putStrLn ""
+        ) [10000, 50000, 100000]
+
+-- ============================================================================
+-- Benchmark 6: Numerical Integration
+-- ============================================================================
+
+benchIntegration :: IO ()
+benchIntegration = do
+    printHeader "BENCHMARK 6: Numerical Integration (Numerical Simulation)"
+    putStrLn "  FP Concepts: Higher-order functions, domain decomposition"
+    putStrLn "  Parallelism: Domain decomposition + parallel evaluation"
+    putStrLn ""
+    
+    let sizes = [1000000, 5000000, 10000000]
+    
+    mapM_ (\tf -> do
+        putStrLn $ "  === Function: " ++ funcName tf ++ " ==="
+        putStrLn $ "  Exact answer: " ++ show (exactAnswer tf)
+        putStrLn ""
+        
+        mapM_ (\n -> do
+            putStrLn $ "  --- N = " ++ show n ++ " sub-intervals ---"
+            
+            -- Sequential (strict)
+            (seqResult, seqTime) <- timeIt (return $ integrateStrict (func tf) (lowerBound tf) (upperBound tf) n)
+            printResult "Sequential (strict)" seqTime
+            putStrLn $ "    Result: " ++ show seqResult
+            putStrLn $ "    Error:  " ++ show (abs (seqResult - exactAnswer tf))
+            
+            -- Parallel (domain decomposition) with different chunk counts
+            mapM_ (\chunks -> do
+                (_parResult, parTime) <- timeIt (return $ parallelIntegrate (func tf) (lowerBound tf) (upperBound tf) n chunks)
+                let speedup = realToFrac seqTime / realToFrac parTime :: Double
+                printResult ("Parallel (" ++ show chunks ++ " chunks)") parTime
+                putStrLn $ "    Result: " ++ show _parResult
+                putStrLn $ "    Speedup: " ++ show (roundTo 2 speedup) ++ "x"
+                ) [2, 4, 8]
+            
+            putStrLn ""
+            ) sizes
+        ) testFunctions
 
 roundTo :: Int -> Double -> Double
 roundTo n x = fromIntegral (round (x * 10^n) :: Int) / fromIntegral (10^n :: Int)
