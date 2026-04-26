@@ -189,6 +189,39 @@ def _count_chunk(text):
     words = [w for w in words if w]
     return Counter(words)
 
+def parallel_word_count(text, num_workers=4):
+    """
+    Parallel word count using multiprocessing.
+    
+    COMPARISON WITH HASKELL:
+      Haskell: runPar $ parMapM countChunk chunks >>= return . unionsWith (+)
+      Python:  Pool.map(count_chunk, chunks); reduce Counter merge
+    
+    OVERHEAD: The text must be pickled and sent to each worker process.
+    For large texts, this serialization dominates.
+    """
+    chunk_size = max(1, len(text) // num_workers)
+    # Split on word boundaries
+    chunks = []
+    start = 0
+    for i in range(1, num_workers):
+        end = min(i * chunk_size, len(text))
+        # Don't split in the middle of a word
+        while end < len(text) and text[end] != ' ':
+            end += 1
+        chunks.append(text[start:end])
+        start = end
+    chunks.append(text[start:])
+    
+    with Pool(num_workers) as pool:
+        results = pool.map(_count_chunk, chunks)
+    
+    # Reduce: merge all counters
+    total = Counter()
+    for result in results:
+        total += result
+    return total
+
 def generate_random_list(n, seed=42):
     rng = random.Random(seed)
     return [rng.randint(1, n * 10) for _ in range(n)]
@@ -258,6 +291,12 @@ def main():
         seq_result, seq_time = time_it(sequential_word_count, text)
         print_result("Sequential", seq_time)
         print(f"    Top 5: {seq_result.most_common(5)}")
+        for workers in [2, 4]:
+            par_result, par_time = time_it(parallel_word_count, text, workers)
+            speedup = seq_time / par_time if par_time > 0 else 0
+            print_result(f"Parallel ({workers} workers)", par_time)
+            print(f"    Speedup: {speedup:.2f}x")
+        print()
         
         
     print("\nAll Python benchmarks complete!")
